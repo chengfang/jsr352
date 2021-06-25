@@ -314,6 +314,17 @@ public abstract class AbstractJobOperator implements JobOperator {
         return getJobRepository().getJobExecutions(instance);
     }
 
+    /**
+     * Gets job executions belonging to the job identified by the {@code jobName}.
+     * @param jobName the job name identifying the job
+     * @param limit the maximum number of job executions to return
+     * @return job executions belonging to the job
+     * @since 1.3.9.Final, 1.4.3.Final
+     */
+    public List<JobExecution> getJobExecutionsByJob(final String jobName, final int limit) {
+        return getJobRepository().getJobExecutionsByJob(jobName, limit);
+    }
+
     @Override
     public JobExecution getJobExecution(final long executionId) throws NoSuchJobExecutionException, JobSecurityException {
         return getJobExecutionImpl(executionId);

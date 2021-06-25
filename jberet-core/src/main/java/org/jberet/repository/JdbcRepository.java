@@ -79,6 +79,7 @@ public final class JdbcRepository extends AbstractPersistentRepository {
     private static final String SELECT_ALL_JOB_EXECUTIONS = "select-all-job-executions";
     private static final String SELECT_JOB_EXECUTIONS_BY_JOB_INSTANCE_ID = "select-job-executions-by-job-instance-id";
     private static final String SELECT_RUNNING_JOB_EXECUTIONS_BY_JOB_NAME = "select-running-job-executions-by-job-name";
+    private static final String SELECT_JOB_EXECUTIONS_BY_JOB_NAME = "select-job-executions-by-job-name";
     private static final String SELECT_JOB_EXECUTION = "select-job-execution";
     private static final String INSERT_JOB_EXECUTION = "insert-job-execution";
     private static final String UPDATE_JOB_EXECUTION = "update-job-execution";
@@ -591,32 +592,57 @@ public final class JdbcRepository extends AbstractPersistentRepository {
     @Override
     public List<JobExecution> getJobExecutions(final JobInstance jobInstance) {
         final String select;
-        long jobInstanceId = 0;
         if (jobInstance == null) {
             select = sqls.getProperty(SELECT_ALL_JOB_EXECUTIONS);
         } else {
             select = sqls.getProperty(SELECT_JOB_EXECUTIONS_BY_JOB_INSTANCE_ID);
-            jobInstanceId = jobInstance.getInstanceId();
         }
+        return getJobExecutions0(select, jobInstance, null, Integer.MAX_VALUE);
+    }
 
-        final List<JobExecution> result = new ArrayList<JobExecution>();
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public List<JobExecution> getJobExecutionsByJob(final String jobName, final int limit) {
+        final String selectSql = sqls.getProperty(SELECT_JOB_EXECUTIONS_BY_JOB_NAME);
+        return getJobExecutions0(selectSql, null, jobName, limit);
+    }
+
+    /**
+     * Gets all job executions from executing the select sql statement.
+     * @param selectSql the select sql statement string
+     * @param jobInstance optional job instance whose id may be used as sql statement parameter
+     * @param jobName optional job name that may be used as sql statement parameter
+     * @param limit the maximum number of job executions to return, may not be negative number
+     * @return all job executions from executing the sql statement, within the {@code limit}
+     */
+    private List<JobExecution> getJobExecutions0(final String selectSql,
+                                                 final JobInstance jobInstance,
+                                                 final String jobName,
+                                                 final int limit) {
+        final List<JobExecution> result = new ArrayList<>();
         final Connection connection = getConnection();
         ResultSet rs = null;
         PreparedStatement preparedStatement = null;
+        long jobInstanceId = 0;
         try {
-            preparedStatement = connection.prepareStatement(select);
+            preparedStatement = connection.prepareStatement(selectSql);
             if (jobInstance != null) {
-                preparedStatement.setLong(1, jobInstanceId);
+                preparedStatement.setLong(1, jobInstanceId = jobInstance.getInstanceId());
+            } else if (jobName != null) {
+                preparedStatement.setString(1, jobName);
             }
+
             rs = preparedStatement.executeQuery();
-            while (rs.next()) {
+            while (rs.next() && (limit == Integer.MAX_VALUE || result.size() < limit)) {
                 final long executionId = rs.getLong(TableColumns.JOBEXECUTIONID);
+                if (jobInstance == null) {
+                    jobInstanceId = rs.getLong(TableColumns.JOBINSTANCEID);
+                }
                 final SoftReference<JobExecutionImpl, Long> ref = jobExecutions.get(executionId);
                 JobExecutionImpl jobExecution1 = (ref != null) ? ref.get() : null;
                 if (jobExecution1 == null) {
-                    if (jobInstance == null) {
-                        jobInstanceId = rs.getLong(TableColumns.JOBINSTANCEID);
-                    }
                     final Properties jobParameters1 = BatchUtil.stringToProperties(rs.getString(TableColumns.JOBPARAMETERS));
                     jobExecution1 =
                             new JobExecutionImpl(getJobInstance(jobInstanceId), executionId, jobParameters1,
@@ -632,10 +658,10 @@ public final class JdbcRepository extends AbstractPersistentRepository {
                         final Properties jobParameters1 = BatchUtil.stringToProperties(rs.getString(TableColumns.JOBPARAMETERS));
                         jobExecution1 =
                                 new JobExecutionImpl(getJobInstance(jobInstanceId), executionId, jobParameters1,
-                                      rs.getTimestamp(TableColumns.CREATETIME), rs.getTimestamp(TableColumns.STARTTIME),
-                                      rs.getTimestamp(TableColumns.ENDTIME), rs.getTimestamp(TableColumns.LASTUPDATEDTIME),
-                                      rs.getString(TableColumns.BATCHSTATUS), rs.getString(TableColumns.EXITSTATUS),
-                                      rs.getString(TableColumns.RESTARTPOSITION));
+                                        rs.getTimestamp(TableColumns.CREATETIME), rs.getTimestamp(TableColumns.STARTTIME),
+                                        rs.getTimestamp(TableColumns.ENDTIME), rs.getTimestamp(TableColumns.LASTUPDATEDTIME),
+                                        rs.getString(TableColumns.BATCHSTATUS), rs.getString(TableColumns.EXITSTATUS),
+                                        rs.getString(TableColumns.RESTARTPOSITION));
                         jobExecutions.replace(executionId,
                                 new SoftReference<JobExecutionImpl, Long>(jobExecution1, jobExecutionReferenceQueue, executionId));
                     }
@@ -644,7 +670,7 @@ public final class JdbcRepository extends AbstractPersistentRepository {
                 result.add(jobExecution1);
             }
         } catch (final Exception e) {
-            throw BatchMessages.MESSAGES.failToRunQuery(e, select);
+            throw BatchMessages.MESSAGES.failToRunQuery(e, selectSql);
         } finally {
             close(connection, preparedStatement, null, rs);
         }

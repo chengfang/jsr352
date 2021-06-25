@@ -15,10 +15,12 @@ package org.jberet.repository;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 import javax.batch.runtime.BatchStatus;
 import javax.batch.runtime.JobExecution;
 import javax.batch.runtime.JobInstance;
@@ -290,6 +292,17 @@ public final class InfinispanRepository extends AbstractRepository {
             }
         }
         return result;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public List<JobExecution> getJobExecutionsByJob(final String jobName, final int limit) {
+        return jobExecutionCache.values().stream().filter(e -> e.getJobName().equals(jobName))
+                .sorted(Comparator.reverseOrder())
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 
     @Override

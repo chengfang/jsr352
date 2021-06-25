@@ -12,10 +12,16 @@
 
 package org.jberet.testapps.purgeInMemoryRepository;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import javax.batch.operations.NoSuchJobException;
 import javax.batch.operations.NoSuchJobInstanceException;
 import javax.batch.runtime.BatchStatus;
@@ -28,7 +34,6 @@ import org.jberet.runtime.JobExecutionImpl;
 import org.jberet.runtime.JobInstanceImpl;
 import org.jberet.spi.PropertyKey;
 import org.jberet.testapps.common.AbstractIT;
-import org.junit.Assert;
 
 public abstract class PurgeRepositoryTestBase extends AbstractIT {
     protected static final long purgeSleepMillis = 2000;
@@ -41,7 +46,7 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
         final String prepurgeJobName = (jobName.length == 0) ? PurgeRepositoryTestBase.prepurgeJobName : jobName[0];
         startJob(prepurgeJobName);
         awaitTermination();
-        Assert.assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
+        assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
         System.out.printf("%s job execution id: %s, status: %s%n", prepurgeJobName, jobExecutionId, jobExecution.getBatchStatus());
         return jobExecutionId;
     }
@@ -51,8 +56,8 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
         awaitTermination();
 
         //the current job will not be purged, and should complete
-        Assert.assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
-        Assert.assertNotNull(jobOperator.getJobExecution(jobExecutionId));
+        assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
+        assertNotNull(jobOperator.getJobExecution(jobExecutionId));
     }
 
     protected void noSuchJobException() throws Exception {
@@ -60,19 +65,19 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
         for (final String noSuchJobName : noSuchJobNames) {
             try {
                 final int result = jobOperator.getJobInstanceCount(noSuchJobName);
-                Assert.fail("Expecting NoSuchJobException, but got " + result);
+                fail("Expecting NoSuchJobException, but got " + result);
             } catch (final NoSuchJobException e) {
                 System.out.printf("Got expected %s%n", e);
             }
 
             try {
-                Assert.fail("Expecting NoSuchJobException, but got " + jobOperator.getJobInstances(noSuchJobName, 0, 1));
+                fail("Expecting NoSuchJobException, but got " + jobOperator.getJobInstances(noSuchJobName, 0, 1));
             } catch (final NoSuchJobException e) {
                 System.out.printf("Got expected %s%n", e);
             }
 
             try {
-                Assert.fail("Expecting NoSuchJobException, but got " + jobOperator.getRunningExecutions(noSuchJobName));
+                fail("Expecting NoSuchJobException, but got " + jobOperator.getRunningExecutions(noSuchJobName));
             } catch (final NoSuchJobException e) {
                 System.out.printf("Got expected %s%n", e);
             }
@@ -86,7 +91,7 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
             if (result.isEmpty()) {
                 System.out.printf("Got expected result: %s%n", result);
             } else {
-                Assert.fail("Expecting NoSuchJobInstanceException, but got " + result);
+                fail("Expecting NoSuchJobInstanceException, but got " + result);
             }
         } catch (final NoSuchJobInstanceException e) {
             System.out.printf("Got expected %s%n", e);
@@ -102,7 +107,7 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
     protected void getRunningExecutions() throws Exception {
         prepurge();
         final List<Long> runningExecutions = jobOperator.getRunningExecutions(prepurgeJobName);
-        Assert.assertEquals(0, runningExecutions.size());
+        assertEquals(0, runningExecutions.size());
     }
 
     /**
@@ -115,8 +120,36 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
     protected void getRunningExecutions2() throws Exception {
         startJob(prepurgeJobName);
         final List<Long> runningExecutions = jobOperator.getRunningExecutions(prepurgeJobName);
-        Assert.assertEquals(1, runningExecutions.size());
+        assertEquals(1, runningExecutions.size());
         awaitTermination();
+    }
+
+    protected void getJobExecutionsByJob() throws Exception {
+        final int loopCount = 3;
+        for (int i = 0; i < loopCount; i++) {
+            startJob(prepurgeJobName);
+            startJob(prepurge2JobName);
+        }
+
+        // get job executions for job name prepurge, no limit
+        List<JobExecution> executions = jobOperator.getJobExecutionsByJob(prepurgeJobName, Integer.MAX_VALUE);
+        verifyJobExecutionsByJob(executions, 3, prepurgeJobName);
+
+        // get job executions for job name prepurge, limit 2
+        executions = jobOperator.getJobExecutionsByJob(prepurgeJobName, 2);
+        verifyJobExecutionsByJob(executions, 2, prepurgeJobName);
+
+        // get job executions for job name prepurge2, no limit
+        executions = jobOperator.getJobExecutionsByJob(prepurge2JobName, Integer.MAX_VALUE);
+        verifyJobExecutionsByJob(executions, 3, prepurge2JobName);
+
+        // get job executions for job name prepurge2, limit 1
+        executions = jobOperator.getJobExecutionsByJob(prepurge2JobName, 1);
+        verifyJobExecutionsByJob(executions, 1, prepurge2JobName);
+
+        // get all job executions
+        executions = jobOperator.getJobExecutions(null);
+        assertTrue(executions.size() >= loopCount * 2);
     }
 
     protected void memoryTest() throws Exception {
@@ -136,7 +169,7 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
             params.setProperty("skip.thread.check", "true");
             params.setProperty("writer.sleep.time", "0");
             startJobAndWait(chunkPartitionJobXml);
-            Assert.assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
+            assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
         }
     }
 
@@ -161,7 +194,7 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
 
     protected void restartKilled() throws Exception {
         restartKilled(null);
-        Assert.assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
+        assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
     }
 
     protected void restartKilledStopAbandon() throws Exception {
@@ -174,22 +207,22 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
         restartExecution.awaitTermination(5, TimeUnit.MINUTES);
         jobOperator.abandon(restartExecutionId);
         jobOperator.abandon(originalJobExecutionId);
-        Assert.assertEquals(BatchStatus.ABANDONED, jobOperator.getJobExecution(originalJobExecutionId).getBatchStatus());
-        Assert.assertEquals(BatchStatus.ABANDONED, restartExecution.getBatchStatus());
+        assertEquals(BatchStatus.ABANDONED, jobOperator.getJobExecution(originalJobExecutionId).getBatchStatus());
+        assertEquals(BatchStatus.ABANDONED, restartExecution.getBatchStatus());
     }
 
     protected void restartKilledForce() throws Exception {
         final Properties restartParams = new Properties();
         restartParams.setProperty(PropertyKey.RESTART_MODE, PropertyKey.RESTART_MODE_FORCE);
         restartKilled(restartParams);
-        Assert.assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
+        assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
     }
 
     protected void restartKilledDetect() throws Exception {
         final Properties restartParams = new Properties();
         restartParams.setProperty(PropertyKey.RESTART_MODE, PropertyKey.RESTART_MODE_DETECT);
         restartKilled(restartParams);
-        Assert.assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
+        assertEquals(BatchStatus.COMPLETED, jobExecution.getBatchStatus());
     }
 
     private void restartKilled(final Properties restartParams) throws InterruptedException {
@@ -201,6 +234,24 @@ public abstract class PurgeRepositoryTestBase extends AbstractIT {
         restartAndWait(originalJobExecutionId);
     }
 
+    /**
+     * Verifies job executions obtained by job name: expected number,
+     * job execution id in descending order, and expected job name.
+     * @param executions list of job exections by job name
+     * @param expectedSize expected number of job exections
+     * @param jobName expected job name in each job exection
+     */
+    private void verifyJobExecutionsByJob(List<JobExecution> executions, int expectedSize, String jobName) {
+        System.out.printf("## executions for %s: %s%n", jobName,
+                executions.stream().map(JobExecution::getExecutionId).collect(Collectors.toList()));
+        assertEquals(expectedSize, executions.size());
+        long previousExecutionId = Long.MAX_VALUE;
+        for (JobExecution execution : executions) {
+            assertTrue(execution.getExecutionId() < previousExecutionId);
+            assertEquals(jobName, execution.getJobName());
+            previousExecutionId = execution.getExecutionId();
+        }
+    }
 
     public static final class JobExecutionSelector1 implements JobExecutionSelector {
         private JobContext jobContext;

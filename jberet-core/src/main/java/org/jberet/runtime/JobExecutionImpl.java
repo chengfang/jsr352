@@ -35,7 +35,7 @@ import org.jberet.job.model.Job;
 import org.jberet.util.BatchUtil;
 import org.wildfly.security.manager.WildFlySecurityManager;
 
-public final class JobExecutionImpl extends AbstractExecution implements JobExecution, Cloneable {
+public final class JobExecutionImpl extends AbstractExecution implements JobExecution, Cloneable, Comparable<JobExecutionImpl> {
     private static final long serialVersionUID = 3706885354351337764L;
 
     /**
@@ -355,8 +355,11 @@ public final class JobExecutionImpl extends AbstractExecution implements JobExec
     }
 
     @Override
-    public int hashCode() {
-        return (int) (id ^ (id >>> 32));
+    /**
+     * {@inheritDoc}
+     */
+    public int compareTo(final JobExecutionImpl other) {
+        return Long.compare(id, other.id);
     }
 
     private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
